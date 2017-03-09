@@ -102,7 +102,7 @@ namespace CacheSim
     LONG        m_Generation;
     ud_t        m_Disassembler;
     uint32_t    m_StackIndex;                 ///< Index of current stack in callstack data. Recomputed whenever the call stack contents changes.
-    int         m_LogicalCoreIndex;           ///< Index of logical core, -1
+	bool		m_TraceEnabled;
   };
 
   static thread_local ThreadState s_ThreadState;
@@ -121,7 +121,7 @@ namespace CacheSim
   static uintptr_t g_RaiseExceptionAddress;
 
   static int s_CoreMappingCount = 0;
-  static struct { DWORD m_ThreadId; int m_LogicalCore; } s_CoreMappings[128];
+  static struct { DWORD m_ThreadId; } s_CoreMappings[128];
 
   class AutoSpinLock
   {
@@ -627,7 +627,7 @@ static int Backtrace2(uintptr_t callstack[], const PCONTEXT ctx)
   return i;
 }
 
-static int FindLogicalCoreIndex(uint32_t thread_id)
+static bool FindTracedThread(uint32_t thread_id)
 {
   using namespace CacheSim;
 
@@ -637,11 +637,19 @@ static int FindLogicalCoreIndex(uint32_t thread_id)
   {
     if (s_CoreMappings[i].m_ThreadId == thread_id)
     {
-      return s_CoreMappings[i].m_LogicalCore;
+		return true;
     }
   }
 
-  return -1;
+  return false;
+}
+
+int GetCurrentProcessorNumberXP() {
+	int CPUInfo[4];
+	__cpuid(CPUInfo, 1);
+	// CPUInfo[1] is EBX, bits 24-31 are APIC ID
+	if ((CPUInfo[3] & (1 << 9)) == 0) return -1;  // no APIC on chip
+	return (unsigned)CPUInfo[1] >> 24;
 }
 
 #if !USE_VEH_TRAMPOLINE
@@ -665,16 +673,20 @@ static LONG WINAPI StepFilter(PEXCEPTION_RECORD ExceptionRecord, PCONTEXT Contex
     if (s_ThreadState.m_Generation != curr_gen)
     {
       ud_init(ud);
-      ud_set_mode(ud, 64);
+	  ud_set_mode(ud, 64);
 
-      s_ThreadState.m_LogicalCoreIndex = FindLogicalCoreIndex(GetCurrentThreadId());
+	  s_ThreadState.m_TraceEnabled = FindTracedThread(GetCurrentThreadId());
 
       s_ThreadState.m_Generation = curr_gen;
       InvalidateStack();
     }
 
+	if (!s_ThreadState.m_TraceEnabled)
+	{
+		return EXCEPTION_CONTINUE_EXECUTION;
+	}
 
-    const int core_index = s_ThreadState.m_LogicalCoreIndex;
+	const int core_index = GetCurrentProcessorNumberXP();//  s_ThreadState.m_LogicalCoreIndex;
 
     // Only trace threads we've mapped to cores. Ignore all others.
     if (g_TraceEnabled && core_index >= 0)
@@ -828,7 +840,8 @@ bool CacheSimStartCapture()
       { 0x1a9000, 0x1a875f, 101552 },   // Win 7 SP1 v6.1 build 7601
       { 0x1ac000, 0x1a7d5d, 351820 },   // Win 8.1 RTM
       { 0x1ad000, 0x1aa28f, 351756 },   // Win 8.1 Pro build 9600
-      { 0x1be000, 0x1cc294,  94928 },   // Win 8.0 RTM
+	  { 0x1be000, 0x1cc294,  94928 },   // Win 8.0 RTM
+	  { 0x1d1000, 0x1d8dbd, 436668 },   // Win 10 1607 build 14393.000
       { 0x1d1000, 0x1d204f, 436668 },   // Win 10 1607 build 14393.222
       { 0x1d1000, 0x1dc01c, 441340 },   // Win 10 1607 build 14393.693
     };
@@ -1122,7 +1135,7 @@ void CacheSimRemoveHandler()
 }
 
 __declspec(dllexport)
-void CacheSimSetThreadCoreMapping(uint32_t thread_id, int logical_core_id)
+void CacheSimSetThreadCoreMapping(uint32_t thread_id)
 {
   using namespace CacheSim;
 
@@ -1134,7 +1147,7 @@ void CacheSimSetThreadCoreMapping(uint32_t thread_id, int logical_core_id)
   {
     if (s_CoreMappings[i].m_ThreadId == thread_id)
     {
-      s_CoreMappings[i].m_LogicalCore = logical_core_id;
+		return;
     }
   }
 
@@ -1145,7 +1158,6 @@ void CacheSimSetThreadCoreMapping(uint32_t thread_id, int logical_core_id)
   }
 
   s_CoreMappings[count].m_ThreadId = thread_id;
-  s_CoreMappings[logical_core_id].m_LogicalCore = logical_core_id;
 
   ++s_CoreMappingCount;
 }

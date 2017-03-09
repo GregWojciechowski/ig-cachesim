@@ -37,7 +37,7 @@ int main(int argc, char* argv[])
 
   // This needs to happen to map win32 thread ids to physical cores for cache simulation.
   // If a thread is not mapped, it will not be simulated.
-  cachesim.SetThreadCoreMapping(GetCurrentThreadId(), 0);
+  cachesim.SetThreadCoreMapping(GetCurrentThreadId());
 
   cachesim.Start();
 

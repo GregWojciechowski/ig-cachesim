@@ -46,7 +46,7 @@ extern "C"
 
   /// Set what Jaguar core (0-7) this Win32 thread ID will map to.
   /// Threads without a jaguar core id will not be recorded, so you'll need to set up atleast one.
-  IG_CACHESIM_API void CacheSimSetThreadCoreMapping(uint32_t thread_id, int logical_core_id);
+  IG_CACHESIM_API void CacheSimSetThreadCoreMapping(uint32_t thread_id);
 
   /// Start recording a capture, buffering it to memory.
   IG_CACHESIM_API bool CacheSimStartCapture();
@@ -131,9 +131,9 @@ namespace CacheSim
       m_RemoveHandlerFn();
     }
 
-    inline void SetThreadCoreMapping(uint32_t thread_id, int logical_core)
+    inline void SetThreadCoreMapping(uint32_t thread_id)
     {
-      m_SetThreadCoreMapping(thread_id, logical_core);
+      m_SetThreadCoreMapping(thread_id);
     }
   };
 }
