@@ -499,6 +499,7 @@ static void GenerateMemoryAccesses(int core_index, const ud_t* ud, DWORD64 rip, 
     break;
 
   case UD_Imovntdq:
+  case UD_Imovntps:
   case UD_Imovntdqa:
     // TODO: Handle this specially?
     data_w(ComputeEa(ud->operand[0], ctx), 16);
@@ -646,14 +647,6 @@ static bool FindTracedThread(uint32_t thread_id)
   return false;
 }
 
-int GetCurrentProcessorNumberXP() {
-	int CPUInfo[4];
-	__cpuid(CPUInfo, 1);
-	// CPUInfo[1] is EBX, bits 24-31 are APIC ID
-	if ((CPUInfo[3] & (1 << 9)) == 0) return -1;  // no APIC on chip
-	return (unsigned)CPUInfo[1] >> 24;
-}
-
 #if !USE_VEH_TRAMPOLINE
 static LONG WINAPI StepFilter(_In_ struct _EXCEPTION_POINTERS* ExcInfo)
 #else
@@ -688,7 +681,7 @@ static LONG WINAPI StepFilter(PEXCEPTION_RECORD ExceptionRecord, PCONTEXT Contex
 		return EXCEPTION_CONTINUE_EXECUTION;
 	}
 
-	const int core_index = GetCurrentProcessorNumberXP();//  s_ThreadState.m_LogicalCoreIndex;
+	const int core_index = GetCurrentProcessorNumber();
 
     // Only trace threads we've mapped to cores. Ignore all others.
     if (g_TraceEnabled && core_index >= 0)
@@ -902,6 +895,8 @@ bool CacheSimStartCapture()
       DebugBreak();
     }
   }
+
+#endif
 
   for (int i = 0; i < thread_count; ++i)
   {
